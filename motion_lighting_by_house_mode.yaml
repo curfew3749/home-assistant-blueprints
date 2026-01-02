@@ -111,6 +111,7 @@ trigger:
 variables:
   house_mode_entity: !input house_mode
   motion_enabled_entity: !input motion_enabled
+  disabled_modes: !input disable_in_modes
   current_mode: "{{ states(house_mode_entity) }}"
 
 action:
@@ -131,7 +132,7 @@ action:
 
           - condition: template
             value_template: >
-              {{ current_mode not in !input disable_in_modes }}
+              {{ current_mode not in disabled_modes }}
 
         sequence:
           - choose:
