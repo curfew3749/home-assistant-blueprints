@@ -1,117 +1,124 @@
-Motion Lighting by House Mode
+Got it — **one clean block, no fences, no commentary, no tricks**.
+This is **plain text**, YAML-style, ready to copy the entire thing and paste directly into GitHub.
 
-A Home Assistant automation blueprint for motion-activated lighting that adapts behavior based on a global house mode such as Day, Evening, and Night.
+---
 
-This blueprint is designed to be reusable across multiple rooms while keeping behavior predictable and easy to control from the UI.
+name: Motion Lighting by House Mode
 
-What This Blueprint Does
+description: >
+A Home Assistant automation blueprint for motion-activated lighting
+that adapts brightness and behavior based on a global house mode
+such as Day, Evening, and Night.
 
-When motion is detected:
-Turns lights on automatically
-Sets brightness based on house mode
-Day → 100%
-Evening → configurable (default 20%)
-Night → configurable (default 10%)
+purpose:
 
-When no motion is detected:
-Turns lights off after a configurable delay
+* Provide consistent motion lighting behavior across rooms
+* Avoid time-based automations in favor of explicit house modes
+* Allow optional control toggles without forcing helper sprawl
+* Keep all configuration in the Home Assistant UI
 
-Additional features:
-Global enable/disable for motion lighting
-Ability to disable motion lighting for specific house modes
-Automatic re-enable of motion lighting after a period of no motion
+behavior:
+motion_detected:
+- Lights turn on automatically
+- Brightness is determined by current house mode
+- Day: 100 percent brightness
+- Evening: configurable, default 20 percent
+- Night: configurable, default 10 percent
 
-Required Helpers
+no_motion_detected:
+- Lights turn off after a configurable delay
 
-This blueprint assumes the following helpers exist in Home Assistant.
+additional_features:
+- Optional motion lighting enable or disable toggle
+- Ability to disable motion lighting in specific house modes
+- Optional automatic re-enable of motion lighting after no motion
 
-House Mode (input_select)
+required_helpers:
+house_mode:
+type: input_select
+description: Global house mode selector
+required: true
+example_options:
+- Day
+- Evening
+- Night
+notes: Option names must match exactly
 
-An input select that represents the current house mode.
+motion_lighting_enabled:
+type: input_boolean
+description: Optional enable or disable toggle for motion lighting
+required: false
+notes: >
+If not selected when configuring the automation, motion lighting
+is always enabled and no helper is required.
 
-Example options:
-Day
-Evening
-Night
+blueprint_inputs:
+motion_sensor:
+description: Binary motion sensor for the room
 
-The option names must match exactly.
+lights:
+description: One or more lights controlled by the automation
 
-Motion Lighting Enabled (input_boolean)
+house_mode_selector:
+description: Global input_select defining the house mode
 
-A toggle used to temporarily disable motion-activated lighting.
+motion_lighting_enabled_toggle:
+description: Optional input_boolean to enable or disable motion lighting
 
-When turned off:
-Motion will not turn lights on
-The blueprint can automatically turn motion lighting back on after no motion
+disable_motion_in_modes:
+description: House modes where motion should not turn lights on
 
-Blueprint Inputs
+evening_brightness:
+description: Brightness percentage used in Evening mode
 
-Motion Sensor
-Binary motion sensor for the room
+night_brightness:
+description: Brightness percentage used in Night mode
 
-Lights
-One or more lights to control
+no_motion_off_delay:
+description: Minutes to wait before turning lights off after no motion
 
-House Mode Selector
-Global house mode input_select
+auto_reenable_delay:
+description: >
+Minutes of no motion before automatically re-enabling motion lighting.
+Only used if a motion lighting toggle is selected.
 
-Motion Lighting Enabled Toggle
-Enable or disable motion lighting entirely
+example_configurations:
+bedroom:
+disable_motion_in_modes:
+- Night
+evening_brightness: 20
+motion_lighting_enabled_toggle: selected
+result:
+- Lights turn on during Day and Evening
+- Lights never turn on automatically at night
 
-Disable Motion In These Modes
-House modes where motion should not turn lights on
+hallway:
+disable_motion_in_modes: none
+night_brightness: 10
+motion_lighting_enabled_toggle: not_selected
+result:
+- Lights always turn on via motion
+- Brightness adapts safely for night movement
 
-Evening Brightness
-Brightness percentage used in Evening mode
+installation:
 
-Night Brightness
-Brightness percentage used in Night mode
+* Import the blueprint using its raw GitHub URL
+* Create an automation from the blueprint
+* Configure the inputs for the room
+* Save the automation
+* Repeat for additional rooms as needed
 
-Minutes to Turn Lights Off
-Time after no motion before lights turn off
+design_notes:
 
-Minutes to Auto Re-Enable Motion
-Time of no motion before motion lighting is automatically re-enabled
+* Uses house mode instead of clock-based logic
+* All behavior is configurable through the UI
+* One blueprint can be reused across the entire home
+* Manual light control is never blocked
 
-Example Configurations
+known_limitations:
 
-Bedroom
-Disable Motion In These Modes: Night
-Evening Brightness: 20%
-Motion Lighting Enabled: ON
+* No lux or light-level sensing
+* No fade transitions by default
+* Assumes house mode is managed elsewhere
 
-Result:
-Lights turn on during Day and Evening, but never automatically at night.
-
-Hallway or Bathroom
-Disable Motion In These Modes: none
-Night Brightness: 10%
-
-Result:
-Dim lighting at night for safe navigation.
-
-Installation
-
-Import the blueprint into Home Assistant using its raw GitHub URL
-Create an automation from the blueprint
-Configure the inputs for the room
-Save
-
-Repeat for each room where motion lighting is desired.
-
-Design Notes
-
-Uses house mode instead of time-based logic
-All behavior is configurable through the UI
-One blueprint can be reused across the entire home
-Manual light control is never blocked
-
-Known Limitations
-
-No lux or light-level sensing
-No fade transitions by default
-Assumes house mode is managed elsewhere
-
-License
-
-MIT License
+license: MIT License
