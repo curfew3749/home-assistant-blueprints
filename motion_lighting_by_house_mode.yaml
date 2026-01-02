@@ -109,7 +109,8 @@ trigger:
       minutes: !input no_motion_off_delay
 
 variables:
-  current_mode: "{{ states(!input house_mode) }}"
+  house_mode_entity: !input house_mode
+  current_mode: "{{ states(house_mode_entity) }}"
 
 action:
   - choose:
