@@ -144,7 +144,7 @@ action:
               - service: light.turn_on
                 target: !input lights
                 data:
-                  brightness_pct: !input day_brightness   # Fallback when no house mode
+                  brightness_pct: !input day_brightness
 
       # TURN LIGHTS OFF + OPTIONAL AUTO RE-ENABLE
       - conditions:
@@ -166,5 +166,5 @@ action:
                     state: "off"
                 then:
                   - service: input_boolean.turn_on
-                    target:
-                      entity_id: "{{ motion_enabled_entity }}"   # FIXED: use target instead of entity_id
+                    data_template:
+                      entity_id: "{{ motion_enabled_entity }}"
