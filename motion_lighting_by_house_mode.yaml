@@ -48,6 +48,15 @@ blueprint:
             - Evening
             - Night
 
+    day_brightness:
+      name: Day Brightness %
+      default: 100
+      selector:
+        number:
+          min: 1
+          max: 100
+          unit_of_measurement: "%"
+
     evening_brightness:
       name: Evening Brightness %
       default: 20
@@ -129,7 +138,7 @@ action:
                   - service: light.turn_on
                     target: !input lights
                     data:
-                      brightness_pct: 100
+                      brightness_pct: !input day_brightness
 
               - conditions: "{{ current_mode == 'Evening' }}"
                 sequence:
