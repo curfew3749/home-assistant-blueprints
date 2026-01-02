@@ -110,6 +110,7 @@ trigger:
 
 variables:
   house_mode_entity: !input house_mode
+  motion_enabled_entity: !input motion_enabled
   current_mode: "{{ states(house_mode_entity) }}"
 
 action:
@@ -124,8 +125,8 @@ action:
           - condition: template
             value_template: >
               {{
-                not !input motion_enabled
-                or is_state(!input motion_enabled, 'on')
+                motion_enabled_entity == ''
+                or is_state(motion_enabled_entity, 'on')
               }}
 
           - condition: template
@@ -165,7 +166,7 @@ action:
             target: !input lights
 
           - condition: template
-            value_template: "{{ !input motion_enabled }}"
+            value_template: "{{ motion_enabled_entity != '' }}"
 
           - delay:
               minutes: !input auto_reenable_delay
@@ -176,4 +177,4 @@ action:
 
           - service: input_boolean.turn_on
             target:
-              entity_id: !input motion_enabled
+              entity_id: "{{ motion_enabled_entity }}"
