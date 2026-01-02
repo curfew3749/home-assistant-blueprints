@@ -3,6 +3,7 @@ blueprint:
   description: >-
     Motion-activated lighting that adapts brightness based on a global house mode (Day, Evening, Night),
     with optional enable/disable toggle, per-mode disable, auto-off timer, and optional auto re-enable.
+    House mode is optional — leave blank for simple full-brightness motion lighting.
   domain: automation
   input:
     motion_sensor:
@@ -18,7 +19,10 @@ blueprint:
           entity:
             domain: light
     house_mode:
-      name: House Mode Selector
+      name: House Mode Selector (Optional)
+      description: >-
+        Optional input_select with options Day/Evening/Night. Leave blank for fixed brightness.
+      default: ""
       selector:
         entity:
           domain: input_select
@@ -32,7 +36,7 @@ blueprint:
           domain: input_boolean
     disable_in_modes:
       name: Disable Motion In These Modes
-      description: House modes where motion should NOT turn lights on
+      description: House modes where motion should NOT turn lights on (only used if house mode selected)
       default: []
       selector:
         select:
@@ -42,7 +46,8 @@ blueprint:
             - Evening
             - Night
     day_brightness:
-      name: Day Brightness %
+      name: Day / Default Brightness %
+      description: Used for Day mode or when no house mode is selected
       default: 100
       selector:
         number:
@@ -99,12 +104,12 @@ trigger:
 variables:
   house_mode_entity: !input house_mode
   motion_enabled_entity: !input motion_enabled
-  current_mode: "{{ states(house_mode_entity) }}"
-  disabled_modes: !input disable_in_modes   # This fixes the original error
+  current_mode: "{{ states(house_mode_entity) if house_mode_entity != '' else '' }}"
+  disabled_modes: !input disable_in_modes
 
 action:
   - choose:
-      # === TURN LIGHTS ON ===
+      # TURN LIGHTS ON
       - conditions:
           - condition: state
             entity_id: !input motion_sensor
@@ -135,9 +140,13 @@ action:
                     target: !input lights
                     data:
                       brightness_pct: !input night_brightness
-            default: []   # In case current_mode is none of the above
+            default:
+              - service: light.turn_on
+                target: !input lights
+                data:
+                  brightness_pct: !input day_brightness   # Fallback when no house mode
 
-      # === TURN LIGHTS OFF + OPTIONAL AUTO RE-ENABLE ===
+      # TURN LIGHTS OFF + OPTIONAL AUTO RE-ENABLE
       - conditions:
           - condition: state
             entity_id: !input motion_sensor
@@ -157,5 +166,4 @@ action:
                     state: "off"
                 then:
                   - service: input_boolean.turn_on
-                    target:
-                      entity_id: "{{ motion_enabled_entity }}"
+                    entity_id: "{{ motion_enabled_entity }}"
