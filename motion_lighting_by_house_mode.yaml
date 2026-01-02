@@ -16,7 +16,7 @@ blueprint:
       name: Lights
       selector:
         target:
-          entity:
+          entity: 
             domain: light
     house_mode:
       name: House Mode Selector (Optional)
@@ -166,4 +166,5 @@ action:
                     state: "off"
                 then:
                   - service: input_boolean.turn_on
-                    entity_id: "{{ motion_enabled_entity }}"
+                    target:
+                      entity_id: "{{ motion_enabled_entity }}"   # FIXED: use target instead of entity_id
