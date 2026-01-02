@@ -1,8 +1,3 @@
-Got it — **one clean block, no fences, no commentary, no tricks**.
-This is **plain text**, YAML-style, ready to copy the entire thing and paste directly into GitHub.
-
----
-
 name: Motion Lighting by House Mode
 
 description: >
