@@ -1,9 +1,9 @@
 blueprint:
   name: Motion Lighting by House Mode
   description: >
-    Turn lights on via motion based on house mode (Day/Evening/Night),
-    with brightness control, per-mode disable, auto-off timer,
-    and automatic re-enable of motion lighting after no motion.
+    Motion-activated lighting that adapts brightness based on a global
+    house mode (Day, Evening, Night), with optional enable/disable toggle,
+    per-mode disable, auto-off timer, and optional auto re-enable.
   domain: automation
 
   input:
@@ -28,14 +28,17 @@ blueprint:
           domain: input_select
 
     motion_enabled:
-      name: Motion Lighting Enabled Toggle
+      name: Motion Lighting Enabled Toggle (Optional)
+      description: >
+        Optional. If not set, motion lighting is always enabled.
+      default: ""
       selector:
         entity:
           domain: input_boolean
 
     disable_in_modes:
       name: Disable Motion In These Modes
-      description: Select house modes where motion should NOT turn lights on
+      description: House modes where motion should NOT turn lights on
       default: []
       selector:
         select:
@@ -74,6 +77,8 @@ blueprint:
 
     auto_reenable_delay:
       name: Minutes to Auto Re-Enable Motion Lighting
+      description: >
+        Only used if a Motion Lighting Enabled Toggle is selected.
       default: 30
       selector:
         number:
@@ -100,14 +105,18 @@ variables:
 action:
   - choose:
 
+      # TURN LIGHTS ON
       - conditions:
           - condition: state
             entity_id: !input motion_sensor
             state: "on"
 
-          - condition: state
-            entity_id: !input motion_enabled
-            state: "on"
+          - condition: template
+            value_template: >
+              {{
+                not !input motion_enabled
+                or is_state(!input motion_enabled, 'on')
+              }}
 
           - condition: template
             value_template: >
@@ -136,6 +145,7 @@ action:
                     data:
                       brightness_pct: !input night_brightness
 
+      # TURN LIGHTS OFF + OPTIONAL AUTO RE-ENABLE
       - conditions:
           - condition: state
             entity_id: !input motion_sensor
@@ -143,6 +153,9 @@ action:
         sequence:
           - service: light.turn_off
             target: !input lights
+
+          - condition: template
+            value_template: "{{ !input motion_enabled }}"
 
           - delay:
               minutes: !input auto_reenable_delay
