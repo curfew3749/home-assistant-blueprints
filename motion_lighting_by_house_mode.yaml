@@ -200,32 +200,36 @@ variables:
   enable_ramping_val: !input enable_ramping
   ramp_seconds: "{{ ramp_time_val if enable_ramping_val else 0 }}"
   disable_auto_on_entity: !input disable_auto_on
+  use_override_sensors_val: !input use_override_sensors
+  use_override_lights_val: !input use_override_lights
+  use_override_fans_val: !input use_override_fans
+  exclude_label_val: !input exclude_label
 
-  motion_entities: >
-    {% if !input use_override_sensors %}
-      {{ area_entities(area_id) | select('match', '^binary_sensor\\..*(motion|occupancy)$') | list }}
-    {% else %}
+  motion_entities: >-
+    {% if use_override_sensors_val %}
       {{ !input override_motion_sensors }}
+    {% else %}
+      {{ area_entities(area_id) | select('match', '^binary_sensor\\..*(motion|occupancy)$') | list }}
     {% endif %}
 
-  light_entities: >
-    {% if !input use_override_lights %}
+  light_entities: >-
+    {% if use_override_lights_val %}
+      {{ (!input override_lights).entity_id | default([]) }}
+    {% else %}
       {% set all_lights = area_entities(area_id) | select('match', '^light\\.') | list %}
-      {% if !input exclude_label != '' %}
-        {% set excluded = expand(label_entities(!input exclude_label)) | selectattr('domain', 'eq', 'light') | map(attribute='entity_id') | list %}
+      {% if exclude_label_val != '' %}
+        {% set excluded = expand(label_entities(exclude_label_val)) | selectattr('domain', 'eq', 'light') | map(attribute='entity_id') | list %}
         {{ all_lights | reject('in', excluded) | list }}
       {% else %}
         {{ all_lights }}
       {% endif %}
-    {% else %}
-      {{ (!input override_lights).entity_id | default([]) }}
     {% endif %}
 
-  fan_entities: >
-    {% if !input use_override_fans %}
-      {{ area_entities(area_id) | select('match', '^(fan|switch)\\.') | list }}
-    {% else %}
+  fan_entities: >-
+    {% if use_override_fans_val %}
       {{ (!input override_fan_entities).entity_id | default([]) }}
+    {% else %}
+      {{ area_entities(area_id) | select('match', '^(fan|switch)\\.') | list }}
     {% endif %}
 
   keep_fan_on: "{{ current_mode == 'Night' }}"
