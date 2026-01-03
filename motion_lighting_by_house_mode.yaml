@@ -1,20 +1,21 @@
 blueprint:
   name: Motion Lighting by House Mode (Single Area + Optional Overrides)
   description: >-
-    Simple setup: Select one area and it auto-detects motion sensors, lights, and fans.
-    Optional overrides for advanced control. Lights always auto-off.
+    Simple: Select one area → auto-detects motion sensors, lights, fans.
+    Lights/fans ALWAYS auto-off after no motion (even if manually turned on).
+    Optional Disable Auto Turn-On toggle + advanced overrides.
   domain: automation
 
   input:
     main_area:
       name: Main Room/Area
-      description: The primary area — motion sensors, lights, and fans will be auto-detected from here
+      description: The primary area — motion sensors, lights, and fans auto-detected from here
       selector:
         area:
 
     exclude_label:
       name: Exclude Lights with This Label (Optional)
-      description: Lights in the area with this label will not be controlled
+      description: Lights in the area with this label will NOT be controlled
       default: ""
       selector:
         text:
@@ -22,7 +23,7 @@ blueprint:
     # --- Advanced Overrides (Optional) ---
     use_override_sensors:
       name: Override Motion Sensors? (Advanced)
-      description: Enable to manually select specific motion sensors instead of using all in area
+      description: Enable to manually select specific motion sensors instead of area auto-detect
       default: false
       selector:
         boolean:
@@ -41,7 +42,7 @@ blueprint:
 
     use_override_lights:
       name: Override Lights? (Advanced)
-      description: Enable to manually select specific lights instead of all in area
+      description: Enable to manually select specific lights instead of area auto-detect
       default: false
       selector:
         boolean:
@@ -57,13 +58,13 @@ blueprint:
 
     use_override_fans:
       name: Override Fans/Exhaust? (Advanced)
-      description: Enable to manually select specific fans/switches instead of all in area
+      description: Enable to manually select specific fans/switches
       default: false
       selector:
         boolean:
 
     override_fan_entities:
-      name: Custom Fans/Exhaust Entities
+      name: Custom Fans/Exhaust
       description: Only used if override enabled above
       selector:
         target:
@@ -76,8 +77,8 @@ blueprint:
     disable_auto_on:
       name: Disable Auto Turn-On Toggle (Optional)
       description: >-
-        When ON: Motion will NOT turn lights on (manual only), but auto-off still works.
-        Great for bathrooms. Add this input_boolean to your dashboard for easy control!
+        When ON: Motion will NOT turn lights on (manual on only), auto-off still works.
+        Add to dashboard for per-room control (e.g., bathroom mode).
       default: ""
       selector:
         entity:
@@ -85,20 +86,15 @@ blueprint:
 
     house_mode:
       name: House Mode Selector (Optional)
+      description: input_select with Day/Evening/Night options
       default: ""
       selector:
         entity:
           domain: input_select
 
-    motion_enabled:
-      name: Motion Lighting Enabled Toggle (Optional)
-      default: ""
-      selector:
-        entity:
-          domain: input_boolean
-
     disable_in_modes:
       name: Disable Motion In These Modes
+      description: House modes where motion should NOT turn lights on
       default: []
       selector:
         select:
@@ -159,42 +155,42 @@ blueprint:
           max: 60
           unit_of_measurement: minutes
 
-    auto_reenable_delay:
-      name: Minutes to Auto Re-Enable Motion Lighting
-      default: 30
-      selector:
-        number:
-          min: 5
-          max: 240
-          unit_of_measurement: minutes
-
 mode: restart
 
 trigger:
   - platform: state
+    entity_id:
+      - "{{ area_entities(!input main_area) | select('match', '^binary_sensor\\.(?!.*(battery|wifi|link_quality|device_tracker|person|update|problem))') | select('match', 'motion|occupancy') | list }}"
     to: "on"
-    for: 1
 
   - platform: state
+    entity_id:
+      - "{{ area_entities(!input main_area) | select('match', '^binary_sensor\\.(?!.*(battery|wifi|link_quality|device_tracker|person|update|problem))') | select('match', 'motion|occupancy') | list }}"
     to: "off"
     for:
       minutes: !input no_motion_off_delay
 
 variables:
   area_id: !input main_area
+  house_mode_entity: !input house_mode
+  disable_auto_on_entity: !input disable_auto_on
+  current_mode: "{{ states(house_mode_entity) if house_mode_entity != '' else '' }}"
+  disabled_modes: !input disable_in_modes
+  ramp_enabled: !input enable_ramping
+  ramp_seconds: "{{ !input ramp_time if ramp_enabled else 0 }}"
 
   motion_entities: >
     {% if !input use_override_sensors %}
-      {{ area_entities(area_id) | select('match', '^binary_sensor\\..*_(motion|occupancy)$') | list }}
+      {{ area_entities(area_id) | select('match', '^binary_sensor\\..*(motion|occupancy)$') | reject('match', '.*(battery|wifi|link_quality|device_tracker|person|update|problem).*') | list }}
     {% else %}
       {{ !input override_motion_sensors }}
     {% endif %}
 
   light_entities: >
-    {% set all_lights = area_entities(area_id) | select('match', '^light\\.') | list %}
     {% if !input use_override_lights %}
+      {% set all_lights = area_entities(area_id) | select('match', '^light\\.') | list %}
       {% if !input exclude_label != '' %}
-        {% set excluded = expand(label_entities(!input exclude_label)) | map(attribute='entity_id') | list %}
+        {% set excluded = expand(label_entities(!input exclude_label)) | selectattr('domain', 'eq', 'light') | map(attribute='entity_id') | list %}
         {{ all_lights | reject('in', excluded) | list }}
       {% else %}
         {{ all_lights }}
@@ -205,31 +201,36 @@ variables:
 
   fan_entities: >
     {% if !input use_override_fans %}
-      {{ area_entities(area_id) | select('match', '^(fan|switch)\\.') | list }}
+      {{ area_entities(area_id) | select('match', '^(fan|switch)\\.') | reject('match', '.*(battery|wifi|link_quality|device_tracker|person|update|problem).*') | list }}
     {% else %}
       {{ (!input override_fan_entities).entity_id | default([]) }}
     {% endif %}
 
-  current_mode: "{{ states(!input house_mode) if !input house_mode != '' else '' }}"
-  ramp_seconds: "{{ !input ramp_time if !input enable_ramping else 0 }}"
-
 action:
   - choose:
-      # Motion On → Turn Lights On (if allowed)
+
+      # -------------------------
+      # TURN LIGHTS ON (if auto-on allowed)
+      # -------------------------
       - conditions:
           - condition: state
             entity_id: "{{ motion_entities }}"
             state: "on"
+
           - condition: template
-            value_template: "{{ !input motion_enabled == '' or is_state(!input motion_enabled, 'on') }}"
+            value_template: >-
+              {{ current_mode not in disabled_modes }}
+
           - condition: template
-            value_template: "{{ current_mode not in !input disable_in_modes }}"
-          - condition: template
-            value_template: "{{ !input disable_auto_on == '' or is_state(!input disable_auto_on, 'off') }}"
+            value_template: >-
+              {{ disable_auto_on_entity == '' or is_state(disable_auto_on_entity, 'off') }}
+
           - condition: template
             value_template: "{{ light_entities | length > 0 }}"
+
         sequence:
           - choose:
+
               - conditions: "{{ current_mode == 'Day' }}"
                 sequence:
                   - service: light.turn_on
@@ -265,15 +266,19 @@ action:
                   brightness_pct: !input day_brightness
                   transition: "{{ ramp_seconds }}"
 
-      # No Motion → Turn Off Lights + Fans
+      # -------------------------
+      # TURN OFF LIGHTS + FANS (ALWAYS when room empty)
+      # -------------------------
       - conditions:
           - condition: state
             entity_id: "{{ motion_entities }}"
             state: "off"
-          - condition: template
-            value_template: "{{ !input motion_enabled == '' or is_state(!input motion_enabled, 'on') }}"
+
         sequence:
-          - if: "{{ light_entities | length > 0 }}"
+          # Turn off lights
+          - if:
+              - condition: template
+                value_template: "{{ light_entities | length > 0 }}"
             then:
               - service: light.turn_off
                 target:
@@ -281,22 +286,11 @@ action:
                 data:
                   transition: "{{ ramp_seconds }}"
 
-          - if: "{{ fan_entities | length > 0 }}"
+          # Turn off fans/exhaust
+          - if:
+              - condition: template
+                value_template: "{{ fan_entities | length > 0 }}"
             then:
               - service: homeassistant.turn_off
                 target:
                   entity_id: "{{ fan_entities }}"
-
-          # Auto re-enable global toggle
-          - if: "{{ !input motion_enabled != '' }}"
-            then:
-              - delay:
-                  minutes: !input auto_reenable_delay
-              - if:
-                  - condition: state
-                    entity_id: "{{ motion_entities }}"
-                    state: "off"
-                then:
-                  - service: input_boolean.turn_on
-                    target:
-                      entity_id: !input motion_enabled
