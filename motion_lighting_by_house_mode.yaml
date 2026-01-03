@@ -196,9 +196,10 @@ variables:
   house_mode_entity: !input house_mode
   current_mode: "{{ states(house_mode_entity) if house_mode_entity != '' else 'Day' }}"
   disabled_modes: !input disable_in_modes
-  ramp_enabled: !input enable_ramping
-  ramp_seconds: >-
-    {{ !input ramp_time if !input enable_ramping else 0 }}
+  ramp_time_val: !input ramp_time
+  enable_ramping_val: !input enable_ramping
+  ramp_seconds: "{{ ramp_time_val if enable_ramping_val else 0 }}"
+  disable_auto_on_entity: !input disable_auto_on
 
   motion_entities: >
     {% if !input use_override_sensors %}
@@ -240,7 +241,7 @@ action:
           - condition: template
             value_template: "{{ current_mode not in disabled_modes }}"
           - condition: template
-            value_template: "{{ !input disable_auto_on == '' or is_state(!input disable_auto_on, 'off') }}"
+            value_template: "{{ disable_auto_on_entity == '' or is_state(disable_auto_on_entity, 'off') }}"
           - condition: template
             value_template: "{{ light_entities | length > 0 }}"
         sequence:
