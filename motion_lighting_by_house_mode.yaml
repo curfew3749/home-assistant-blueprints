@@ -178,7 +178,6 @@ variables:
   fan_transition: !input fan_off_transition
   area_target: !input light_area
   exclude_label: !input exclude_label
-  fan_target: !input fan_entities
 
   target_lights: >
     {% set all_lights = area_entities(area_target) | select('match', '^light\\.') | list %}
@@ -222,7 +221,7 @@ action:
                 sequence:
                   - service: light.turn_on
                     target:
-                      entity_id: "{{ target_lights }}"
+                     17 entity_id: "{{ target_lights }}"
                     data:
                       brightness_pct: !input day_brightness
                       transition: "{{ ramp_seconds if ramp_enabled else 0 }}"
@@ -254,7 +253,7 @@ action:
                   transition: "{{ ramp_seconds if ramp_enabled else 0 }}"
 
       # -------------------------
-      # TURN OFF LIGHTS + FANS (ALWAYS - no blocker)
+      # TURN OFF LIGHTS + FANS (ALWAYS)
       # -------------------------
       - conditions:
           - condition: state
@@ -266,7 +265,7 @@ action:
               {{ motion_enabled_entity == '' or is_state(motion_enabled_entity, 'on') }}
 
         sequence:
-          # Always turn off lights if any are on
+          # Always turn off lights
           - if:
               - condition: template
                 value_template: "{{ target_lights | length > 0 }}"
@@ -277,22 +276,29 @@ action:
                 data:
                   transition: "{{ ramp_seconds if ramp_enabled else 0 }}"
 
-          # Turn off fans (independent)
+          # Turn off selected fan entities (use fan.turn_off if any are fan domain, else homeassistant.turn_off)
           - if:
               - condition: template
-                value_template: "{{ fan_target.entity_id | default([]) | length > 0 }}"
+                value_template: >-
+                  {{ (!input fan_entities).entity_id | default([]) | length > 0 }}
             then:
-              - choose:
-                  - conditions: "{{ fan_target.entity_id | default([]) | first | split('.') | first == 'fan' }}"
-                    sequence:
-                      - service: fan.turn_off
-                        target: !input fan_entities
-                        data:
-                          transition: "{{ fan_transition if fan_ramp_enabled else 0 }}"
+              - if:
+                  - condition: template
+                    value_template: >-
+                      {{ (!input fan_entities).entity_id | select('match', '^fan\\.') | list | count > 0 }}
+                then:
+                  - service: fan.turn_off
+                    target: !input fan_entities
+                    data:
+                      transition: "{{ fan_transition if fan_ramp_enabled else none }}"
 
-                  default:
-                    - service: homeassistant.turn_off
-                      target: !input fan_entities
+              - if:
+                  - condition: template
+                    value_template: >-
+                      {{ (!input fan_entities).entity_id | reject('match', '^fan\\.') | list | count > 0 }}
+                then:
+                  - service: homeassistant.turn_off
+                    target: !input fan_entities
 
           # Auto re-enable global toggle
           - if:
