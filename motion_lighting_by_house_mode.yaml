@@ -1,32 +1,61 @@
 blueprint:
   name: Motion Lighting by House Mode (Single Area + Fan Stays On at Night)
   description: >-
-    Single-area motion lighting. Lights always auto-off.
-    Fans auto-off only in Day/Evening — stay on all night in Night mode.
+    A flexible, easy-to-use motion lighting blueprint for a single room/area.
+
+    HOW IT WORKS:
+    • Select one Home Assistant Area — the blueprint automatically finds:
+      - All motion/occupancy sensors in that area
+      - All lights in that area (with optional label exclusion)
+      - All fan and switch entities in that area (e.g., ceiling fan, exhaust fan)
+    • Motion turns lights ON (adaptive brightness based on your House Mode: Day/Evening/Night)
+    • Lights ALWAYS turn OFF after no motion for the set delay — even if turned on manually.
+    • Fans behave differently depending on House Mode:
+      - Day or Evening: Fans turn OFF after no motion (energy-saving)
+      - Night: Fans stay ON all night (great for bedrooms — white noise, air circulation while sleeping)
+    • Optional "Disable Auto Turn-On" toggle: Turn it ON to prevent motion from turning lights on (manual control only), but auto-off still works. Perfect for bathrooms or when kids manually turn lights on.
+
+    REQUIRED SETUP:
+    • Assign entities to Areas in Home Assistant (Settings > Areas & Zones).
+    • For adaptive brightness and Night fan behavior: Create an input_select (e.g., input_select.house_mode) with options "Day", "Evening", "Night" and select it below.
+
+    EXAMPLES:
+    • Bedroom: Motion turns lights on dimly at night. Ceiling fan stays on all night in Night mode. Lights/fan auto-off when you leave in the morning.
+    • Bathroom: Use "Disable Auto Turn-On" toggle ON → manual light on, exhaust fan auto-off after you leave (unless Night mode).
+    • Kids Room: Motion turns lights on. Kids manually turn lights on → still auto-off when room empty. No lights left on all day!
+
+    Advanced overrides available if you need custom entity selection instead of area auto-detect.
   domain: automation
 
   input:
     main_area:
       name: Main Room/Area
-      description: Primary area — auto-detects motion sensors, lights, and fans
+      description: >-
+        Choose the area (e.g., "Master Bedroom", "Kids Room", "Bathroom").
+        The blueprint will auto-detect motion sensors, lights, and fans/switches in this area.
       selector:
         area:
 
     exclude_label:
       name: Exclude Lights with This Label (Optional)
+      description: >-
+        If a light in the area has this label (e.g., "no_motion" or "decorative"), it will be ignored.
+        Useful for accent lights you never want automated.
       default: ""
       selector:
         text:
 
-    # --- Advanced Overrides ---
+    # --- Advanced Overrides (leave off for normal area auto-detect) ---
     use_override_sensors:
       name: Override Motion Sensors? (Advanced)
+      description: Turn ON only if you want to manually select specific motion sensors instead of using all in the area.
       default: false
       selector:
         boolean:
 
     override_motion_sensors:
       name: Custom Motion/Occupancy Sensors
+      description: Select specific sensors (only used if override above is ON).
       selector:
         entity:
           domain: binary_sensor
@@ -38,12 +67,14 @@ blueprint:
 
     use_override_lights:
       name: Override Lights? (Advanced)
+      description: Turn ON only if you want to manually select specific lights instead of all in the area.
       default: false
       selector:
         boolean:
 
     override_lights:
       name: Custom Lights
+      description: Select specific lights (only used if override above is ON).
       selector:
         target:
           entity:
@@ -52,12 +83,14 @@ blueprint:
 
     use_override_fans:
       name: Override Fans/Exhaust? (Advanced)
+      description: Turn ON only if you want to manually select specific fans/switches instead of all in the area.
       default: false
       selector:
         boolean:
 
     override_fan_entities:
-      name: Custom Fans/Exhaust
+      name: Custom Fans/Exhaust Entities
+      description: Select specific fan or switch entities (e.g., bathroom exhaust) — only used if override above is ON.
       selector:
         target:
           entity:
@@ -69,21 +102,27 @@ blueprint:
     disable_auto_on:
       name: Disable Auto Turn-On Toggle (Optional)
       description: >-
-        When ON: Motion will NOT turn lights on (manual only). Add to dashboard.
+        Create an input_boolean (e.g., input_boolean.bathroom_no_auto_on).
+        When ON: Motion will NOT turn lights on (you must turn them on manually), but lights and fans still auto-off.
+        Great for bathrooms or to prevent unwanted motion-on. Add this toggle to your dashboard for easy control!
       default: ""
       selector:
         entity:
           domain: input_boolean
 
     house_mode:
-      name: House Mode Selector (Required for Night Fan Behavior)
-      description: input_select with Day/Evening/Night options
+      name: House Mode Selector (Recommended)
+      description: >-
+        Select your global input_select with options "Day", "Evening", "Night".
+        Controls brightness levels and enables "fan stays on all night" in Night mode.
+        Example: Create input_select.house_mode with options Day, Evening, Night.
       selector:
         entity:
           domain: input_select
 
     disable_in_modes:
-      name: Disable Motion In These Modes
+      name: Disable Motion Turn-On In These Modes (Optional)
+      description: Choose house modes where motion should NOT turn lights on (e.g., disable during Day).
       default: []
       selector:
         select:
@@ -94,7 +133,8 @@ blueprint:
             - Night
 
     day_brightness:
-      name: Day / Default Brightness %
+      name: Day Brightness %
+      description: Brightness when house mode is Day (or default if no house mode set).
       default: 100
       selector:
         number:
@@ -104,6 +144,7 @@ blueprint:
 
     evening_brightness:
       name: Evening Brightness %
+      description: Brightness when house mode is Evening.
       default: 20
       selector:
         number:
@@ -113,6 +154,7 @@ blueprint:
 
     night_brightness:
       name: Night Brightness %
+      description: Brightness when house mode is Night.
       default: 10
       selector:
         number:
@@ -121,13 +163,15 @@ blueprint:
           unit_of_measurement: "%"
 
     enable_ramping:
-      name: Enable Brightness Ramping
+      name: Enable Smooth Ramping (Fade On/Off)
+      description: Lights fade in/out smoothly if supported.
       default: false
       selector:
         boolean:
 
     ramp_time:
-      name: Ramp Time (seconds)
+      name: Ramp/Fade Time (seconds)
+      description: How long the fade takes when ramping is enabled.
       default: 2
       selector:
         number:
@@ -136,7 +180,8 @@ blueprint:
           unit_of_measurement: seconds
 
     no_motion_off_delay:
-      name: Minutes to Wait After No Motion
+      name: Minutes to Wait After No Motion Before Turning Off
+      description: Delay before turning off lights/fans when room is empty.
       default: 5
       selector:
         number:
@@ -181,7 +226,7 @@ variables:
       {{ (!input override_fan_entities).entity_id | default([]) }}
     {% endif %}
 
-  # True if we should skip turning off fans (i.e., it's Night mode)
+  # True if we are in Night mode → keep fan on
   keep_fan_on: "{{ current_mode == 'Night' }}"
 
 action:
@@ -235,7 +280,7 @@ action:
                   brightness_pct: !input day_brightness
                   transition: "{{ ramp_seconds }}"
 
-      # TURN OFF LIGHTS + FANS (conditionally for fans)
+      # TURN OFF LIGHTS + FANS (fans only if not Night mode)
       - conditions:
           - condition: state
             entity_id: "{{ motion_entities }}"
