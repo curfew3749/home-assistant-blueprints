@@ -197,7 +197,8 @@ variables:
   current_mode: "{{ states(house_mode_entity) if house_mode_entity != '' else 'Day' }}"
   disabled_modes: !input disable_in_modes
   ramp_enabled: !input enable_ramping
-  ramp_seconds: "{{ !input ramp_time if ramp_enabled else 0 }}"
+  ramp_seconds: >-
+    {{ !input ramp_time if !input enable_ramping else 0 }}
 
   motion_entities: >
     {% if !input use_override_sensors %}
@@ -226,7 +227,6 @@ variables:
       {{ (!input override_fan_entities).entity_id | default([]) }}
     {% endif %}
 
-  # True if we are in Night mode → keep fan on
   keep_fan_on: "{{ current_mode == 'Night' }}"
 
 action:
