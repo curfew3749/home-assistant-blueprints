@@ -1,9 +1,15 @@
 blueprint:
-  name: Motion Lighting by House Mode (Area + Night Fan Hold) v1.3
+  name: Motion Lighting by House Mode (Area + Night Fan Hold) v1.4
   description: >
-    Motion-based lighting using a single Area.
-    Lights always auto-off after no motion.
-    Fans turn off after no motion EXCEPT in Night mode (stay on all night).
+    Full-feature motion lighting blueprint.
+    • Area-based auto discovery
+    • Optional override sensors / lights / fans
+    • Optional exclude-by-label for lights
+    • Disable-auto-on toggle
+    • House modes: Day / Evening / Night
+    • Mode-based brightness
+    • Lights always auto-off
+    • Fans auto-off except Night mode (stay on all night)
   domain: automation
 
   input:
@@ -12,11 +18,58 @@ blueprint:
       selector:
         area:
 
-    house_mode:
-      name: House Mode Selector
+    exclude_label:
+      name: Exclude Lights with This Label
+      default: ""
+      selector:
+        text:
+
+    use_override_sensors:
+      name: Override Motion Sensors?
+      default: false
+      selector:
+        boolean:
+
+    override_motion_sensors:
+      name: Custom Motion Sensors
+      default: []
       selector:
         entity:
-          domain: input_select
+          domain: binary_sensor
+          device_class:
+            - motion
+            - occupancy
+          multiple: true
+
+    use_override_lights:
+      name: Override Lights?
+      default: false
+      selector:
+        boolean:
+
+    override_lights:
+      name: Custom Lights
+      default: {}
+      selector:
+        target:
+          entity:
+            domain: light
+
+    use_override_fans:
+      name: Override Fans / Exhaust?
+      default: false
+      selector:
+        boolean:
+
+    override_fan_entities:
+      name: Custom Fan / Switch Entities
+      default: {}
+      selector:
+        target:
+          entity:
+            domain:
+              - fan
+              - switch
 
     disable_auto_on:
       name: Disable Auto Turn-On Toggle
@@ -25,8 +78,14 @@ blueprint:
         entity:
           domain: input_boolean
 
+    house_mode:
+      name: House Mode Selector
+      selector:
+        entity:
+          domain: input_select
+
     disable_in_modes:
-      name: Disable Motion Turn-On In These Modes
+      name: Disable Motion-On In These Modes
       default: []
       selector:
         select:
@@ -72,16 +131,58 @@ mode: restart
 
 variables:
   area_id: !input main_area
+
   house_mode_entity: !input house_mode
-  disabled_modes: !input disable_in_modes
   disable_auto_on_entity: !input disable_auto_on
+  disabled_modes: !input disable_in_modes
+  exclude_label_val: !input exclude_label
+
+  use_override_sensors_val: !input use_override_sensors
+  use_override_lights_val: !input use_override_lights
+  use_override_fans_val: !input use_override_fans
+
+  override_motion_sensors_val: !input override_motion_sensors
+  override_lights_val: !input override_lights
+  override_fan_entities_val: !input override_fan_entities
 
   current_mode: "{{ states(house_mode_entity) if house_mode_entity != '' else 'Day' }}"
   keep_fan_on: "{{ current_mode == 'Night' }}"
 
-  motion_entities: "{{ area_entities(area_id) | select('match', '^binary_sensor\\..*(motion|occupancy)$') | list }}"
-  light_entities: "{{ area_entities(area_id) | select('match', '^light\\.') | list }}"
-  fan_entities: "{{ area_entities(area_id) | select('match', '^(fan|switch)\\.') | list }}"
+  motion_entities: >-
+    {% if use_override_sensors_val %}
+      {{ override_motion_sensors_val }}
+    {% else %}
+      {{ area_entities(area_id)
+         | select('match', '^binary_sensor\\..*(motion|occupancy)$')
+         | list }}
+    {% endif %}
+
+  light_entities: >-
+    {% if use_override_lights_val %}
+      {{ override_lights_val.entity_id | default([]) }}
+    {% else %}
+      {% set all_lights = area_entities(area_id)
+           | select('match', '^light\\.')
+           | list %}
+      {% if exclude_label_val != '' %}
+        {% set excluded = expand(label_entities(exclude_label_val))
+             | selectattr('domain', 'eq', 'light')
+             | map(attribute='entity_id')
+             | list %}
+        {{ all_lights | reject('in', excluded) | list }}
+      {% else %}
+        {{ all_lights }}
+      {% endif %}
+    {% endif %}
+
+  fan_entities: >-
+    {% if use_override_fans_val %}
+      {{ override_fan_entities_val.entity_id | default([]) }}
+    {% else %}
+      {{ area_entities(area_id)
+         | select('match', '^(fan|switch)\\.')
+         | list }}
+    {% endif %}
 
 trigger:
   - platform: state
@@ -97,9 +198,7 @@ trigger:
 action:
   - choose:
 
-      # -------------------------
       # MOTION ON → TURN LIGHTS ON
-      # -------------------------
       - conditions:
           - condition: template
             value_template: "{{ trigger.to_state.state == 'on' }}"
@@ -139,9 +238,7 @@ action:
                     data:
                       brightness_pct: !input night_brightness
 
-      # ---------------------------------
-      # NO MOTION → TURN LIGHTS OFF
-      # ---------------------------------
+      # NO MOTION → TURN LIGHTS + FANS OFF
       - conditions:
           - condition: template
             value_template: "{{ trigger.to_state.state == 'off' }}"
