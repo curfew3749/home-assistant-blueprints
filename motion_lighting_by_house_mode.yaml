@@ -178,16 +178,21 @@ variables:
   fan_transition: !input fan_off_transition
   area_target: !input light_area
   exclude_label: !input exclude_label
+  fan_entities_list: !input fan_entities
 
   target_lights: >
     {% set all_lights = area_entities(area_target) | select('match', '^light\\.') | list %}
     {% if exclude_label == '' %}
       {{ all_lights }}
     {% else %}
-      {{ all_lights | rejectattr('entity_id', 'in', 
+      {{ all_lights | rejectattr('entity_id', 'in',
           expand(label_entities(exclude_label)) | select('match', '^light\\.') | map(attribute='entity_id') | list
         ) | list }}
     {% endif %}
+
+  has_fan_domain: >
+    {{ fan_entities_list.entity_id is defined and
+       fan_entities_list.entity_id | select('match', '^fan\\.') | list | count > 0 }}
 
 action:
   - choose:
@@ -199,29 +204,24 @@ action:
           - condition: state
             entity_id: !input motion_sensors
             state: "on"
-
           - condition: template
             value_template: >-
               {{ motion_enabled_entity == '' or is_state(motion_enabled_entity, 'on') }}
-
           - condition: template
             value_template: >-
               {{ current_mode not in disabled_modes }}
-
           - condition: template
             value_template: >-
               {{ disable_auto_on_entity == '' or is_state(disable_auto_on_entity, 'off') }}
-
           - condition: template
             value_template: "{{ target_lights | length > 0 }}"
-
         sequence:
           - choose:
               - conditions: "{{ current_mode == 'Day' }}"
                 sequence:
                   - service: light.turn_on
                     target:
-                     17 entity_id: "{{ target_lights }}"
+                      entity_id: "{{ target_lights }}"
                     data:
                       brightness_pct: !input day_brightness
                       transition: "{{ ramp_seconds if ramp_enabled else 0 }}"
@@ -259,13 +259,11 @@ action:
           - condition: state
             entity_id: !input motion_sensors
             state: "off"
-
           - condition: template
             value_template: >-
               {{ motion_enabled_entity == '' or is_state(motion_enabled_entity, 'on') }}
-
         sequence:
-          # Always turn off lights
+          # Turn off lights
           - if:
               - condition: template
                 value_template: "{{ target_lights | length > 0 }}"
@@ -276,27 +274,21 @@ action:
                 data:
                   transition: "{{ ramp_seconds if ramp_enabled else 0 }}"
 
-          # Turn off selected fan entities (use fan.turn_off if any are fan domain, else homeassistant.turn_off)
+          # Turn off fans (if any selected)
           - if:
               - condition: template
                 value_template: >-
-                  {{ (!input fan_entities).entity_id | default([]) | length > 0 }}
+                  {{ fan_entities_list.entity_id is defined and fan_entities_list.entity_id | length > 0 }}
             then:
-              - if:
-                  - condition: template
-                    value_template: >-
-                      {{ (!input fan_entities).entity_id | select('match', '^fan\\.') | list | count > 0 }}
-                then:
-                  - service: fan.turn_off
-                    target: !input fan_entities
-                    data:
-                      transition: "{{ fan_transition if fan_ramp_enabled else none }}"
-
-              - if:
-                  - condition: template
-                    value_template: >-
-                      {{ (!input fan_entities).entity_id | reject('match', '^fan\\.') | list | count > 0 }}
-                then:
+              - choose:
+                  - conditions: "{{ has_fan_domain }}"
+                    sequence:
+                      - service: fan.turn_off
+                        target: !input fan_entities
+                        data:
+                          transition: >-
+                            {{ fan_transition if fan_ramp_enabled else 0 }}
+                default:
                   - service: homeassistant.turn_off
                     target: !input fan_entities
 
