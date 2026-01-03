@@ -1,17 +1,8 @@
 blueprint:
-  name: Motion Lighting by House Mode (Area + Night Fan Hold) v1.6
+  name: Motion Lighting by House Mode (Area + Night Fan Hold) v1.7
   description: >
     Motion lighting blueprint with full feature set.
-
-    - Area-based auto discovery of motion sensors, lights, fans/switches
-    - Optional override for motion sensors, lights, fans
-    - Optional exclude-by-label for lights
-    - House Mode (Day / Evening / Night)
-    - Mode-based brightness
-    - Optional disable-auto-on toggle
-    - Smooth ramping with configurable duration
-    - Lights ALWAYS turn off after no motion delay
-    - Fans turn off after no motion EXCEPT in Night mode
+    Schema-safe for strict Home Assistant validators.
   domain: automation
 
   input:
@@ -104,7 +95,6 @@ blueprint:
         number:
           min: 1
           max: 100
-          unit_of_measurement: "%"
 
     evening_brightness:
       name: Evening Brightness %
@@ -113,7 +103,6 @@ blueprint:
         number:
           min: 1
           max: 100
-          unit_of_measurement: "%"
 
     night_brightness:
       name: Night Brightness %
@@ -122,7 +111,6 @@ blueprint:
         number:
           min: 1
           max: 100
-          unit_of_measurement: "%"
 
     enable_ramping:
       name: Enable Smooth Ramping
@@ -137,7 +125,6 @@ blueprint:
         number:
           min: 0
           max: 30
-          unit_of_measurement: seconds
 
     no_motion_off_delay:
       name: Minutes After No Motion to Turn Off
@@ -146,7 +133,6 @@ blueprint:
         number:
           min: 1
           max: 60
-          unit_of_measurement: minutes
 
 mode: restart
 
@@ -211,127 +197,68 @@ variables:
   keep_fan_on: "{{ current_mode == 'Night' }}"
 
 trigger:
-  # Motion ON
-  - platform: template
-    id: motion_on
+  # Any motion sensor changes
+  - platform: state
     entity_id: "{{ motion_entities }}"
-    value_template: >
-      {{ expand(motion_entities)
-         | selectattr('state','eq','on')
-         | list | count > 0 }}
-
-  # Motion OFF (all clear for delay)
-  - platform: template
-    id: motion_off
-    entity_id: "{{ motion_entities }}"
-    value_template: >
-      {{ expand(motion_entities)
-         | selectattr('state','eq','on')
-         | list | count == 0 }}
-    for:
-      minutes: !input no_motion_off_delay
 
 action:
   - choose:
 
-      # ----------------------------
-      # MOTION ON → TURN LIGHTS ON
-      # ----------------------------
+      # MOTION ON
       - conditions:
-          - condition: trigger
-            id: motion_on
+          - condition: template
+            value_template: >
+              {{ expand(motion_entities)
+                 | selectattr('state','eq','on')
+                 | list | count > 0 }}
           - condition: template
             value_template: "{{ current_mode not in disabled_modes }}"
           - condition: template
-            value_template: "{{ disable_auto_on_entity == '' or is_state(disable_auto_on_entity, 'off') }}"
+            value_template: "{{ disable_auto_on_entity == '' or is_state(disable_auto_on_entity,'off') }}"
         sequence:
-
           - choose:
-              # RAMPING ENABLED
-              - conditions:
-                  - condition: template
-                    value_template: "{{ enable_ramping_val }}"
+              - conditions: "{{ enable_ramping_val }}"
                 sequence:
                   - choose:
                       - conditions: "{{ current_mode == 'Day' }}"
                         sequence:
                           - service: light.turn_on
-                            target:
-                              entity_id: "{{ light_entities }}"
+                            target: { entity_id: "{{ light_entities }}" }
                             data:
                               brightness_pct: !input day_brightness
                               transition: !input ramp_time
-
                       - conditions: "{{ current_mode == 'Evening' }}"
                         sequence:
                           - service: light.turn_on
-                            target:
-                              entity_id: "{{ light_entities }}"
+                            target: { entity_id: "{{ light_entities }}" }
                             data:
                               brightness_pct: !input evening_brightness
                               transition: !input ramp_time
-
                       - conditions: "{{ current_mode == 'Night' }}"
                         sequence:
                           - service: light.turn_on
-                            target:
-                              entity_id: "{{ light_entities }}"
+                            target: { entity_id: "{{ light_entities }}" }
                             data:
                               brightness_pct: !input night_brightness
                               transition: !input ramp_time
-
             default:
-              # RAMPING DISABLED
-              - choose:
-                  - conditions: "{{ current_mode == 'Day' }}"
-                    sequence:
-                      - service: light.turn_on
-                        target:
-                          entity_id: "{{ light_entities }}"
-                        data:
-                          brightness_pct: !input day_brightness
+              - service: light.turn_on
+                target: { entity_id: "{{ light_entities }}" }
 
-                  - conditions: "{{ current_mode == 'Evening' }}"
-                    sequence:
-                      - service: light.turn_on
-                        target:
-                          entity_id: "{{ light_entities }}"
-                        data:
-                          brightness_pct: !input evening_brightness
-
-                  - conditions: "{{ current_mode == 'Night' }}"
-                    sequence:
-                      - service: light.turn_on
-                        target:
-                          entity_id: "{{ light_entities }}"
-                        data:
-                          brightness_pct: !input night_brightness
-
-      # ----------------------------
-      # NO MOTION → TURN LIGHTS OFF
-      # ----------------------------
+      # NO MOTION
       - conditions:
-          - condition: trigger
-            id: motion_off
+          - condition: template
+            value_template: >
+              {{ expand(motion_entities)
+                 | selectattr('state','eq','on')
+                 | list | count == 0 }}
         sequence:
-
-          - choose:
-              - conditions: "{{ enable_ramping_val }}"
-                sequence:
-                  - service: light.turn_off
-                    target:
-                      entity_id: "{{ light_entities }}"
-                    data:
-                      transition: !input ramp_time
-            default:
-              - service: light.turn_off
-                target:
-                  entity_id: "{{ light_entities }}"
-
-          # Fans off unless Night mode
+          - delay:
+              minutes: !input no_motion_off_delay
+          - service: light.turn_off
+            target: { entity_id: "{{ light_entities }}" }
           - choose:
               - conditions: "{{ fan_entities | length > 0 and not keep_fan_on }}"
                 sequence:
                   - service: homeassistant.turn_off
-                    target:
-                      entity_id: "{{ fan_entities }}"
+                    target: { entity_id: "{{ fan_entities }}" }
