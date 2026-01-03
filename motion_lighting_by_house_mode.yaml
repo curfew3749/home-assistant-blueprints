@@ -1,9 +1,8 @@
 blueprint:
   name: Motion Lighting by House Mode (Single Area + Fan Stays On at Night)
   description: >
-    Motion-based lighting using a single Home Assistant Area.
-    Lights always auto-off after no motion.
-    Fans stay on all night in Night mode.
+    Motion-based lighting using one Area. Lights auto-off after no motion.
+    Fans auto-off except in Night mode (stay on all night).
   domain: automation
 
   input:
@@ -140,15 +139,17 @@ mode: restart
 variables:
   area_id: !input main_area
 
+  # Inputs -> variables (IMPORTANT: no !input inside templates)
   house_mode_entity: !input house_mode
-  current_mode: "{{ states(house_mode_entity) if house_mode_entity != '' else 'Day' }}"
-
   disabled_modes: !input disable_in_modes
   disable_auto_on_entity: !input disable_auto_on
 
+  day_brightness_val: !input day_brightness
+  evening_brightness_val: !input evening_brightness
+  night_brightness_val: !input night_brightness
+
   enable_ramping_val: !input enable_ramping
   ramp_time_val: !input ramp_time
-  ramp_seconds: "{{ ramp_time_val if enable_ramping_val else 0 }}"
 
   use_override_sensors_val: !input use_override_sensors
   use_override_lights_val: !input use_override_lights
@@ -159,6 +160,20 @@ variables:
   override_fan_entities_val: !input override_fan_entities
 
   exclude_label_val: !input exclude_label
+
+  # Derived values
+  current_mode: "{{ states(house_mode_entity) if house_mode_entity != '' else 'Day' }}"
+  ramp_seconds: "{{ (ramp_time_val | int) if enable_ramping_val else 0 }}"
+  keep_fan_on: "{{ current_mode == 'Night' }}"
+
+  brightness_pct_val: >-
+    {% if current_mode == 'Evening' %}
+      {{ evening_brightness_val | int }}
+    {% elif current_mode == 'Night' %}
+      {{ night_brightness_val | int }}
+    {% else %}
+      {{ day_brightness_val | int }}
+    {% endif %}
 
   motion_entities: >-
     {% if use_override_sensors_val %}
@@ -196,8 +211,6 @@ variables:
          | list }}
     {% endif %}
 
-  keep_fan_on: "{{ current_mode == 'Night' }}"
-
 trigger:
   - platform: state
     entity_id: "{{ motion_entities }}"
@@ -211,8 +224,7 @@ trigger:
 
 action:
   - choose:
-
-      # TURN LIGHTS ON
+      # TURN LIGHTS ON (motion on)
       - conditions:
           - condition: template
             value_template: "{{ trigger.to_state.state == 'on' }}"
@@ -227,14 +239,10 @@ action:
             target:
               entity_id: "{{ light_entities }}"
             data:
-              brightness_pct: >
-                {% if current_mode == 'Evening' %}{{ !input evening_brightness }}
-                {% elif current_mode == 'Night' %}{{ !input night_brightness }}
-                {% else %}{{ !input day_brightness }}
-                {% endif %}
+              brightness_pct: "{{ brightness_pct_val }}"
               transition: "{{ ramp_seconds }}"
 
-      # TURN LIGHTS + FANS OFF
+      # TURN LIGHTS OFF + (maybe) FANS OFF (no motion for delay)
       - conditions:
           - condition: template
             value_template: "{{ trigger.to_state.state == 'off' }}"
