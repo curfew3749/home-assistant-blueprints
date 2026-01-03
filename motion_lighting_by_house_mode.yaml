@@ -1,5 +1,5 @@
 blueprint:
-  name: Motion Lighting by House Mode (Area + Night Fan Hold) v1.7
+  name: Motion Lighting by House Mode (Area + Night Fan Hold) v1.70
   description: >
     Motion lighting blueprint with full feature set.
     Schema-safe for strict Home Assistant validators.
