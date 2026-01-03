@@ -1,15 +1,17 @@
 blueprint:
-  name: Motion Lighting by House Mode (Area + Night Fan Hold) v1.40
+  name: Motion Lighting by House Mode (Area + Night Fan Hold) v1.5
   description: >
-    Full-feature motion lighting blueprint.
-    • Area-based auto discovery
-    • Optional override sensors / lights / fans
-    • Optional exclude-by-label for lights
-    • Disable-auto-on toggle
-    • House modes: Day / Evening / Night
-    • Mode-based brightness
-    • Lights always auto-off
-    • Fans auto-off except Night mode (stay on all night)
+    Full-feature motion lighting blueprint for a single area.
+
+    Features:
+    - Auto-discover motion sensors, lights, fans/switches by Area
+    - Optional overrides for sensors/lights/fans
+    - Optional exclude-by-label for lights
+    - House mode (Day/Evening/Night) controls brightness and night fan behavior
+    - Optional disable-auto-on toggle (still allows auto-off)
+    - Smooth ramping option with ramp duration
+    - Lights ALWAYS turn off after no motion delay (even if manually turned on)
+    - Fans turn off after no motion EXCEPT Night mode (stay on all night)
   domain: automation
 
   input:
@@ -19,19 +21,19 @@ blueprint:
         area:
 
     exclude_label:
-      name: Exclude Lights with This Label
+      name: Exclude Lights with This Label (Optional)
       default: ""
       selector:
         text:
 
     use_override_sensors:
-      name: Override Motion Sensors?
+      name: Override Motion Sensors? (Advanced)
       default: false
       selector:
         boolean:
 
     override_motion_sensors:
-      name: Custom Motion Sensors
+      name: Custom Motion/Occupancy Sensors
       default: []
       selector:
         entity:
@@ -42,7 +44,7 @@ blueprint:
           multiple: true
 
     use_override_lights:
-      name: Override Lights?
+      name: Override Lights? (Advanced)
       default: false
       selector:
         boolean:
@@ -56,7 +58,7 @@ blueprint:
             domain: light
 
     use_override_fans:
-      name: Override Fans / Exhaust?
+      name: Override Fans/Exhaust? (Advanced)
       default: false
       selector:
         boolean:
@@ -72,20 +74,20 @@ blueprint:
               - switch
 
     disable_auto_on:
-      name: Disable Auto Turn-On Toggle
+      name: Disable Auto Turn-On Toggle (Optional)
       default: ""
       selector:
         entity:
           domain: input_boolean
 
     house_mode:
-      name: House Mode Selector
+      name: House Mode Selector (Recommended)
       selector:
         entity:
           domain: input_select
 
     disable_in_modes:
-      name: Disable Motion-On In These Modes
+      name: Disable Motion Turn-On In These Modes (Optional)
       default: []
       selector:
         select:
@@ -102,6 +104,7 @@ blueprint:
         number:
           min: 1
           max: 100
+          unit_of_measurement: "%"
 
     evening_brightness:
       name: Evening Brightness %
@@ -110,6 +113,7 @@ blueprint:
         number:
           min: 1
           max: 100
+          unit_of_measurement: "%"
 
     night_brightness:
       name: Night Brightness %
@@ -118,14 +122,31 @@ blueprint:
         number:
           min: 1
           max: 100
+          unit_of_measurement: "%"
+
+    enable_ramping:
+      name: Enable Smooth Ramping (Fade On/Off)
+      default: false
+      selector:
+        boolean:
+
+    ramp_time:
+      name: Ramp/Fade Time (seconds)
+      default: 2
+      selector:
+        number:
+          min: 0
+          max: 30
+          unit_of_measurement: seconds
 
     no_motion_off_delay:
-      name: Minutes After No Motion to Turn Off
+      name: Minutes to Wait After No Motion Before Turning Off
       default: 5
       selector:
         number:
           min: 1
           max: 60
+          unit_of_measurement: minutes
 
 mode: restart
 
@@ -133,9 +154,14 @@ variables:
   area_id: !input main_area
 
   house_mode_entity: !input house_mode
-  disable_auto_on_entity: !input disable_auto_on
+  current_mode: "{{ states(house_mode_entity) if house_mode_entity != '' else 'Day' }}"
+
   disabled_modes: !input disable_in_modes
-  exclude_label_val: !input exclude_label
+
+  disable_auto_on_entity: !input disable_auto_on
+
+  enable_ramping_val: !input enable_ramping
+  ramp_time_val: !input ramp_time
 
   use_override_sensors_val: !input use_override_sensors
   use_override_lights_val: !input use_override_lights
@@ -145,9 +171,9 @@ variables:
   override_lights_val: !input override_lights
   override_fan_entities_val: !input override_fan_entities
 
-  current_mode: "{{ states(house_mode_entity) if house_mode_entity != '' else 'Day' }}"
-  keep_fan_on: "{{ current_mode == 'Night' }}"
+  exclude_label_val: !input exclude_label
 
+  # Entity resolution
   motion_entities: >-
     {% if use_override_sensors_val %}
       {{ override_motion_sensors_val }}
@@ -184,73 +210,143 @@ variables:
          | list }}
     {% endif %}
 
-trigger:
-  - platform: state
-    entity_id: "{{ motion_entities }}"
-    to: "on"
+  keep_fan_on: "{{ current_mode == 'Night' }}"
 
-  - platform: state
-    entity_id: "{{ motion_entities }}"
-    to: "off"
+  # Template-friendly occupancy checks
+  any_motion_on: "{{ expand(motion_entities) | selectattr('state','eq','on') | list | count > 0 }}"
+  all_motion_off: "{{ expand(motion_entities) | selectattr('state','eq','on') | list | count == 0 }}"
+
+trigger:
+  # IMPORTANT: template triggers avoid templated entity_id (which HA rejects)
+  - platform: template
+    id: motion_on
+    value_template: "{{ any_motion_on }}"
+
+  - platform: template
+    id: motion_off
+    value_template: "{{ all_motion_off }}"
     for:
       minutes: !input no_motion_off_delay
 
 action:
   - choose:
 
-      # MOTION ON → TURN LIGHTS ON
+      # -------------------------
+      # MOTION ON -> LIGHTS ON
+      # -------------------------
       - conditions:
-          - condition: template
-            value_template: "{{ trigger.to_state.state == 'on' }}"
+          - condition: trigger
+            id: motion_on
           - condition: template
             value_template: "{{ current_mode not in disabled_modes }}"
           - condition: template
             value_template: "{{ disable_auto_on_entity == '' or is_state(disable_auto_on_entity, 'off') }}"
-        sequence:
-          - choose:
-              - conditions:
-                  - condition: template
-                    value_template: "{{ current_mode == 'Day' }}"
-                sequence:
-                  - service: light.turn_on
-                    target:
-                      entity_id: "{{ light_entities }}"
-                    data:
-                      brightness_pct: !input day_brightness
-
-              - conditions:
-                  - condition: template
-                    value_template: "{{ current_mode == 'Evening' }}"
-                sequence:
-                  - service: light.turn_on
-                    target:
-                      entity_id: "{{ light_entities }}"
-                    data:
-                      brightness_pct: !input evening_brightness
-
-              - conditions:
-                  - condition: template
-                    value_template: "{{ current_mode == 'Night' }}"
-                sequence:
-                  - service: light.turn_on
-                    target:
-                      entity_id: "{{ light_entities }}"
-                    data:
-                      brightness_pct: !input night_brightness
-
-      # NO MOTION → TURN LIGHTS + FANS OFF
-      - conditions:
           - condition: template
-            value_template: "{{ trigger.to_state.state == 'off' }}"
+            value_template: "{{ light_entities | length > 0 }}"
         sequence:
-          - service: light.turn_off
-            target:
-              entity_id: "{{ light_entities }}"
 
+          # RAMPING ON
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ not keep_fan_on }}"
+                    value_template: "{{ enable_ramping_val }}"
+                sequence:
+                  - choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ current_mode == 'Day' }}"
+                        sequence:
+                          - service: light.turn_on
+                            target:
+                              entity_id: "{{ light_entities }}"
+                            data:
+                              brightness_pct: !input day_brightness
+                              transition: !input ramp_time
+
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ current_mode == 'Evening' }}"
+                        sequence:
+                          - service: light.turn_on
+                            target:
+                              entity_id: "{{ light_entities }}"
+                            data:
+                              brightness_pct: !input evening_brightness
+                              transition: !input ramp_time
+
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ current_mode == 'Night' }}"
+                        sequence:
+                          - service: light.turn_on
+                            target:
+                              entity_id: "{{ light_entities }}"
+                            data:
+                              brightness_pct: !input night_brightness
+                              transition: !input ramp_time
+
+            # RAMPING OFF (no transition key)
+            default:
+              - choose:
+                  - conditions:
+                      - condition: template
+                        value_template: "{{ current_mode == 'Day' }}"
+                    sequence:
+                      - service: light.turn_on
+                        target:
+                          entity_id: "{{ light_entities }}"
+                        data:
+                          brightness_pct: !input day_brightness
+
+                  - conditions:
+                      - condition: template
+                        value_template: "{{ current_mode == 'Evening' }}"
+                    sequence:
+                      - service: light.turn_on
+                        target:
+                          entity_id: "{{ light_entities }}"
+                        data:
+                          brightness_pct: !input evening_brightness
+
+                  - conditions:
+                      - condition: template
+                        value_template: "{{ current_mode == 'Night' }}"
+                    sequence:
+                      - service: light.turn_on
+                        target:
+                          entity_id: "{{ light_entities }}"
+                        data:
+                          brightness_pct: !input night_brightness
+
+      # -------------------------
+      # NO MOTION -> LIGHTS OFF (+ FANS OFF unless Night)
+      # -------------------------
+      - conditions:
+          - condition: trigger
+            id: motion_off
+        sequence:
+
+          # Lights off (with ramp if enabled)
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ enable_ramping_val }}"
+                sequence:
+                  - service: light.turn_off
+                    target:
+                      entity_id: "{{ light_entities }}"
+                    data:
+                      transition: !input ramp_time
+            default:
+              - service: light.turn_off
+                target:
+                  entity_id: "{{ light_entities }}"
+
+          # Fans off only if NOT Night mode
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ fan_entities | length > 0 and not keep_fan_on }}"
                 sequence:
                   - service: homeassistant.turn_off
                     target:
