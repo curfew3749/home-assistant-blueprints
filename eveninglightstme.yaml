@@ -1,9 +1,9 @@
 blueprint:
-  name: Flexible Evening Light Dimmer v1.0
+  name: Flexible Evening Light Dimmer v1.1
   description: |
     Dims dimmable lights and turns off non-dimmable ones when a selected input_select changes to a specified option.
-    Excludes lights with a specific label.
-    Optionally turns off switches with a specific label.
+    Optionally excludes lights with a selected label.
+    Optionally turns off switches with a selected label.
   domain: automation
   input:
     input_select_entity:
@@ -28,18 +28,18 @@ blueprint:
       default: ""
 
     exclude_light_label:
-      name: Exclude Label for Lights
-      description: Lights with this label will be completely ignored (e.g., "no_evening_dim").
-      selector:
-        text:
+      name: Exclude Label for Lights (Optional)
+      description: Select a label — lights with this label will be completely ignored (e.g., no_evening_dim).
       default: ""
+      selector:
+        label:
 
     include_switch_label:
       name: Include Label for Switches (Optional)
-      description: Switches with this label will be turned off if they are on (e.g., "evening_switches").
-      selector:
-        text:
+      description: Select a label — switches with this label will be turned off if they are on (e.g., evening_switches).
       default: ""
+      selector:
+        label:
 
     dim_percentage:
       name: Dim Brightness Percentage
@@ -69,10 +69,10 @@ condition:
         value_template: "{{ !input trigger_option_secondary == '' and trigger.to_state.state == !input trigger_option_secondary }}"
 
 action:
-  # Dim or turn off lights (excluding labeled ones)
+  # Dim or turn off lights (excluding labeled ones if selected)
   - variables:
       excluded_light_entities: >
-        {% if !input exclude_light_label|trim != '' %}
+        {% if !input exclude_light_label != '' %}
           {{ label_entities(!input exclude_light_label) }}
         {% else %}
           []
@@ -102,10 +102,10 @@ action:
               target:
                 entity_id: "{{ repeat.item }}"
 
-  # Optional: Turn off labeled switches
+  # Optional: Turn off labeled switches if a label is selected
   - if:
       - condition: template
-        value_template: "{{ !input include_switch_label|trim != '' }}"
+        value_template: "{{ !input include_switch_label != '' }}"
     then:
       - variables:
           target_switches: >
