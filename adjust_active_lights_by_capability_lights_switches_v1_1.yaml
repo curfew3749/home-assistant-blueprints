@@ -1,17 +1,28 @@
 blueprint:
-  name: Adjust Active Lights by Capability (Lights + Switches) v1.1
+  name: Adjust Active Lights by Capability (Lights + Switches) v1.2
   description: >
     Dims all currently-on dimmable lights to a selected brightness,
-    turns off non-dimmable lights, and turns off switches that are
-    explicitly labeled as lights. Entities with excluded labels are ignored.
+    turns off non-dimmable lights, and turns off switches explicitly
+    labeled as lights. Entities with excluded labels are ignored.
+    Triggers when a selected entity enters a specified state or option.
   domain: automation
 
   input:
     trigger_entity:
-      name: Trigger
-      description: Entity that activates this automation (input_boolean, button, etc.)
+      name: Trigger Entity
+      description: >
+        Entity that activates this automation (input_boolean, input_select, button, etc.)
       selector:
         entity:
+
+    trigger_state:
+      name: Trigger State / Option
+      description: >
+        State or option value that activates this automation.
+        Use "on" for input_booleans, or the exact option name for input_select.
+      default: "on"
+      selector:
+        text:
 
     brightness_level:
       name: Brightness Percentage
@@ -43,7 +54,7 @@ mode: single
 trigger:
   - platform: state
     entity_id: !input trigger_entity
-    to: "on"
+    to: !input trigger_state
 
 action:
   - variables:
@@ -52,16 +63,16 @@ action:
 
       lights_on: >
         {{ states.light
-           | selectattr('state','eq','on')
-           | rejectattr('entity_id','in', label_entities(excluded))
+           | selectattr('state', 'eq', 'on')
+           | rejectattr('entity_id', 'in', label_entities(excluded))
            | map(attribute='entity_id')
            | list }}
 
       switches_on: >
         {{ states.switch
-           | selectattr('state','eq','on')
-           | selectattr('entity_id','in', label_entities([switch_label]))
-           | rejectattr('entity_id','in', label_entities(excluded))
+           | selectattr('state', 'eq', 'on')
+           | selectattr('entity_id', 'in', label_entities([switch_label]))
+           | rejectattr('entity_id', 'in', label_entities(excluded))
            | map(attribute='entity_id')
            | list }}
 
