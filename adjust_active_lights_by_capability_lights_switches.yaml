@@ -1,10 +1,10 @@
 blueprint:
-  name: Adjust Active Lights by Capability (Lights + Switches) v1.40
+  name: Adjust Active Lights by Capability (Lights + Switches) v1.5
   description: >
     Dims all currently-on dimmable lights to a selected brightness,
     turns off non-dimmable lights, and turns off switches explicitly
     labeled as lights. Entities with excluded labels are ignored.
-    Triggers when a selected entity enters a specified state or option.
+    Triggers when a selected entity changes to a specified state or option.
   domain: automation
 
   input:
@@ -50,14 +50,16 @@ blueprint:
 mode: single
 
 trigger:
-  - platform: template
+  - platform: state
+    entity_id: !input trigger_entity
+
+condition:
+  - condition: template
     value_template: >
-      {{ states[trigger_entity].state == trigger_state }}
+      {{ trigger.to_state.state == trigger_state }}
 
 action:
   - variables:
-      trigger_entity: !input trigger_entity
-      trigger_state: !input trigger_state
       excluded: !input excluded_labels
       switch_label: !input switch_light_label
 
