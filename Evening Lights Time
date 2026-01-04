@@ -1,0 +1,125 @@
+blueprint:
+  name: Flexible Evening Light Dimmer v1.0
+  description: |
+    Dims dimmable lights and turns off non-dimmable ones when a selected input_select changes to a specified option.
+    Excludes lights with a specific label.
+    Optionally turns off switches with a specific label.
+  domain: automation
+  input:
+    input_select_entity:
+      name: Input Select Entity
+      description: The input_select that will trigger this automation.
+      selector:
+        entity:
+          domain: input_select
+
+    trigger_option:
+      name: Trigger Option
+      description: The option name in the input_select that triggers the dimming (e.g., "Evening").
+      selector:
+        text:
+      default: Evening
+
+    trigger_option_secondary:
+      name: Secondary Trigger Option (Optional)
+      description: If provided, the automation will also trigger on this additional option.
+      selector:
+        text:
+      default: ""
+
+    exclude_light_label:
+      name: Exclude Label for Lights
+      description: Lights with this label will be completely ignored (e.g., "no_evening_dim").
+      selector:
+        text:
+      default: ""
+
+    include_switch_label:
+      name: Include Label for Switches (Optional)
+      description: Switches with this label will be turned off if they are on (e.g., "evening_switches").
+      selector:
+        text:
+      default: ""
+
+    dim_percentage:
+      name: Dim Brightness Percentage
+      description: Brightness level (1-100%) to set dimmable lights to.
+      default: 30
+      selector:
+        number:
+          min: 1
+          max: 100
+          unit_of_measurement: "%"
+
+trigger:
+  - platform: state
+    entity_id: !input input_select_entity
+    to: !input trigger_option
+  - platform: state
+    entity_id: !input input_select_entity
+    to: !input trigger_option_secondary
+    enabled: "{{ !input trigger_option_secondary != '' }}"
+
+condition:
+  - condition: or
+    conditions:
+      - condition: template
+        value_template: "{{ trigger.to_state.state == !input trigger_option }}"
+      - condition: template
+        value_template: "{{ !input trigger_option_secondary == '' and trigger.to_state.state == !input trigger_option_secondary }}"
+
+action:
+  # Dim or turn off lights (excluding labeled ones)
+  - variables:
+      excluded_light_entities: >
+        {% if !input exclude_light_label|trim != '' %}
+          {{ label_entities(!input exclude_light_label) }}
+        {% else %}
+          []
+        {% endif %}
+
+      target_lights: >
+        {{ states.light
+           | selectattr('state', 'eq', 'on')
+           | rejectattr('entity_id', 'in', excluded_light_entities)
+           | map(attribute='entity_id')
+           | list }}
+
+  - repeat:
+      for_each: "{{ target_lights }}"
+      sequence:
+        - if:
+            - condition: template
+              value_template: "{{ state_attr(repeat.item, 'brightness') is not none }}"
+          then:
+            - service: light.turn_on
+              target:
+                entity_id: "{{ repeat.item }}"
+              data:
+                brightness_pct: !input dim_percentage
+          else:
+            - service: light.turn_off
+              target:
+                entity_id: "{{ repeat.item }}"
+
+  # Optional: Turn off labeled switches
+  - if:
+      - condition: template
+        value_template: "{{ !input include_switch_label|trim != '' }}"
+    then:
+      - variables:
+          target_switches: >
+            {{ states.switch
+               | selectattr('state', 'eq', 'on')
+               | selectattr('entity_id', 'in', label_entities(!input include_switch_label))
+               | map(attribute='entity_id')
+               | list }}
+      - repeat:
+          for_each: "{{ target_switches }}"
+          sequence:
+            - service: switch.turn_off
+              target:
+                entity_id: "{{ repeat.item }}"
+
+mode: single
+max_exceeded: silent
