@@ -1,5 +1,5 @@
 blueprint:
-  name: Adjust Active Lights by Capability (Lights + Switches) v1.2
+  name: Adjust Active Lights by Capability (Lights + Switches) v1.3
   description: >
     Dims all currently-on dimmable lights to a selected brightness,
     turns off non-dimmable lights, and turns off switches explicitly
@@ -11,7 +11,7 @@ blueprint:
     trigger_entity:
       name: Trigger Entity
       description: >
-        Entity that activates this automation (input_boolean, input_select, button, etc.)
+        Entity that activates this automation (input_boolean, input_select, etc.)
       selector:
         entity:
 
@@ -26,7 +26,6 @@ blueprint:
 
     brightness_level:
       name: Brightness Percentage
-      description: Brightness level for dimmable lights
       default: 30
       selector:
         number:
@@ -52,9 +51,9 @@ blueprint:
 mode: single
 
 trigger:
-  - platform: state
-    entity_id: !input trigger_entity
-    to: !input trigger_state
+  - platform: template
+    value_template: >
+      {{ states(!input trigger_entity) == !input trigger_state }}
 
 action:
   - variables:
