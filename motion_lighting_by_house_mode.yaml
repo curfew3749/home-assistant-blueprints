@@ -1,10 +1,9 @@
 blueprint:
-  name: Motion Lighting by House Mode (Explicit Entities) v3.1
+  name: Motion Lighting by House Mode (Explicit Entities) v3.2
   description: >
     Rock-solid motion lighting blueprint using explicitly selected entities.
     Explicit brightness control in all modes.
-    Prevents brightness restoration bugs when ramping is disabled.
-    Fully HA-safe. No areas. No templated entity_ids.
+    Fixes HA template type coercion and blueprint input scoping bugs.
   domain: automation
 
   input:
@@ -115,18 +114,26 @@ variables:
   disabled_modes: !input disable_in_modes
   keep_fan_on: "{{ current_mode == 'Night' }}"
 
+  # Explicitly import inputs
+  day_brightness_val: !input day_brightness
+  evening_brightness_val: !input evening_brightness
+  night_brightness_val: !input night_brightness
+  enable_ramping_val: !input enable_ramping
+  ramp_time_val: !input ramp_time
+
   target_brightness: >
     {% if current_mode == 'Day' %}
-      {{ day_brightness }}
+      {{ day_brightness_val | float }}
     {% elif current_mode == 'Evening' %}
-      {{ evening_brightness }}
+      {{ evening_brightness_val | float }}
     {% elif current_mode == 'Night' %}
-      {{ night_brightness }}
+      {{ night_brightness_val | float }}
     {% else %}
       100
     {% endif %}
 
-  transition_time: "{{ ramp_time if enable_ramping else 0 }}"
+  transition_time: >
+    {{ ramp_time_val | float if enable_ramping_val else 0 }}
 
 trigger:
   - platform: state
@@ -147,13 +154,15 @@ action:
           - condition: template
             value_template: "{{ current_mode not in disabled_modes }}"
           - condition: template
-            value_template: "{{ disable_auto_on_entity == '' or is_state(disable_auto_on_entity,'off') }}"
+            value_template: >
+              {{ disable_auto_on_entity == '' or
+                 is_state(disable_auto_on_entity,'off') }}
         sequence:
           - service: light.turn_on
             target: !input lights
             data:
-              brightness_pct: "{{ target_brightness }}"
-              transition: "{{ transition_time }}"
+              brightness_pct: "{{ target_brightness | float }}"
+              transition: "{{ transition_time | float }}"
 
       # ----------------------------
       # NO MOTION → TURN OFF
@@ -171,7 +180,7 @@ action:
           - service: light.turn_off
             target: !input lights
             data:
-              transition: "{{ transition_time }}"
+              transition: "{{ transition_time | float }}"
 
           - choose:
               - conditions: "{{ not keep_fan_on }}"
