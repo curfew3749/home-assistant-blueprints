@@ -1,12 +1,12 @@
-# Motion-controlled lights blueprint
-# Version: 1.0.0
+# Motion-controlled lights or switches blueprint
+# Version: 1.1.0
 
 blueprint:
-  name: Motion-controlled lights (on/off with delay)
+  name: Motion-controlled light or switch (on/off with delay) v1.1.0
   description: >
-    Version: 1.0.0
-    Turns lights on when motion or occupancy is detected and turns them off
-    after no motion is detected for a configurable time.
+    Version: 1.1.0
+    Turns a light or switch on when motion or occupancy is detected
+    and turns it off after no motion is detected for a configurable time.
   domain: automation
 
   input:
@@ -18,16 +18,18 @@ blueprint:
           domain: binary_sensor
           multiple: true
 
-    target_lights:
-      name: Light(s)
-      description: Light or lights to control
+    target_entities:
+      name: Light(s) or Switch(es)
+      description: Light(s) or switch(es) to control
       selector:
         target:
           entity:
-            domain: light
+            domain:
+              - light
+              - switch
 
     off_delay:
-      name: Delay before turning lights off
+      name: Delay before turning off
       description: Time to wait after motion stops
       default: 5
       selector:
@@ -50,16 +52,16 @@ trigger:
 
 action:
   - choose:
-      # Motion detected → turn lights on
+      # Motion detected → turn on
       - conditions:
           - condition: state
             entity_id: !input motion_sensors
             state: "on"
         sequence:
-          - service: light.turn_on
-            target: !input target_lights
+          - service: homeassistant.turn_on
+            target: !input target_entities
 
-      # No motion → wait, then turn lights off
+      # No motion → wait, then turn off
       - conditions:
           - condition: state
             entity_id: !input motion_sensors
@@ -70,5 +72,5 @@ action:
           - condition: state
             entity_id: !input motion_sensors
             state: "off"
-          - service: light.turn_off
-            target: !input target_lights
+          - service: homeassistant.turn_off
+            target: !input target_entities
