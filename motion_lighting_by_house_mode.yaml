@@ -1,8 +1,10 @@
 blueprint:
-  name: Motion Lighting by House Mode (Explicit Entities) v3.0
+  name: Motion Lighting by House Mode (Explicit Entities) v3.1
   description: >
     Rock-solid motion lighting blueprint using explicitly selected entities.
-    No areas. No templated entity_ids. Fully HA-safe.
+    Explicit brightness control in all modes.
+    Prevents brightness restoration bugs when ramping is disabled.
+    Fully HA-safe. No areas. No templated entity_ids.
   domain: automation
 
   input:
@@ -113,8 +115,20 @@ variables:
   disabled_modes: !input disable_in_modes
   keep_fan_on: "{{ current_mode == 'Night' }}"
 
+  target_brightness: >
+    {% if current_mode == 'Day' %}
+      {{ day_brightness }}
+    {% elif current_mode == 'Evening' %}
+      {{ evening_brightness }}
+    {% elif current_mode == 'Night' %}
+      {{ night_brightness }}
+    {% else %}
+      100
+    {% endif %}
+
+  transition_time: "{{ ramp_time if enable_ramping else 0 }}"
+
 trigger:
-  # Any motion sensor changes
   - platform: state
     entity_id: !input motion_sensors
 
@@ -122,7 +136,7 @@ action:
   - choose:
 
       # ----------------------------
-      # MOTION ON → TURN LIGHTS ON
+      # MOTION DETECTED → TURN ON
       # ----------------------------
       - conditions:
           - condition: template
@@ -135,37 +149,14 @@ action:
           - condition: template
             value_template: "{{ disable_auto_on_entity == '' or is_state(disable_auto_on_entity,'off') }}"
         sequence:
-          - choose:
-              - conditions: "{{ enable_ramping }}"
-                sequence:
-                  - choose:
-                      - conditions: "{{ current_mode == 'Day' }}"
-                        sequence:
-                          - service: light.turn_on
-                            target: !input lights
-                            data:
-                              brightness_pct: !input day_brightness
-                              transition: !input ramp_time
-                      - conditions: "{{ current_mode == 'Evening' }}"
-                        sequence:
-                          - service: light.turn_on
-                            target: !input lights
-                            data:
-                              brightness_pct: !input evening_brightness
-                              transition: !input ramp_time
-                      - conditions: "{{ current_mode == 'Night' }}"
-                        sequence:
-                          - service: light.turn_on
-                            target: !input lights
-                            data:
-                              brightness_pct: !input night_brightness
-                              transition: !input ramp_time
-            default:
-              - service: light.turn_on
-                target: !input lights
+          - service: light.turn_on
+            target: !input lights
+            data:
+              brightness_pct: "{{ target_brightness }}"
+              transition: "{{ transition_time }}"
 
       # ----------------------------
-      # NO MOTION → TURN LIGHTS OFF
+      # NO MOTION → TURN OFF
       # ----------------------------
       - conditions:
           - condition: template
@@ -180,7 +171,7 @@ action:
           - service: light.turn_off
             target: !input lights
             data:
-              transition: !input ramp_time
+              transition: "{{ transition_time }}"
 
           - choose:
               - conditions: "{{ not keep_fan_on }}"
