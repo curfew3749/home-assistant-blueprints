@@ -1,5 +1,5 @@
 blueprint:
-  name: Adjust Active Lights by Capability (Lights + Switches) v1.4
+  name: Adjust Active Lights by Capability (Lights + Switches) v1.40
   description: >
     Dims all currently-on dimmable lights to a selected brightness,
     turns off non-dimmable lights, and turns off switches explicitly
