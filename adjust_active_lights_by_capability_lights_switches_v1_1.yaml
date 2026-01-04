@@ -1,0 +1,94 @@
+blueprint:
+  name: Adjust Active Lights by Capability (Lights + Switches) v1.1
+  description: >
+    Dims all currently-on dimmable lights to a selected brightness,
+    turns off non-dimmable lights, and turns off switches that are
+    explicitly labeled as lights. Entities with excluded labels are ignored.
+  domain: automation
+
+  input:
+    trigger_entity:
+      name: Trigger
+      description: Entity that activates this automation (input_boolean, button, etc.)
+      selector:
+        entity:
+
+    brightness_level:
+      name: Brightness Percentage
+      description: Brightness level for dimmable lights
+      default: 30
+      selector:
+        number:
+          min: 1
+          max: 100
+          unit_of_measurement: "%"
+
+    excluded_labels:
+      name: Excluded Labels
+      description: Entities with any of these labels will be ignored
+      default: []
+      selector:
+        label:
+          multiple: true
+
+    switch_light_label:
+      name: Switch-as-Light Label
+      description: Switches with this label are treated as lights
+      default: treat_as_light
+      selector:
+        label:
+
+mode: single
+
+trigger:
+  - platform: state
+    entity_id: !input trigger_entity
+    to: "on"
+
+action:
+  - variables:
+      excluded: !input excluded_labels
+      switch_label: !input switch_light_label
+
+      lights_on: >
+        {{ states.light
+           | selectattr('state','eq','on')
+           | rejectattr('entity_id','in', label_entities(excluded))
+           | map(attribute='entity_id')
+           | list }}
+
+      switches_on: >
+        {{ states.switch
+           | selectattr('state','eq','on')
+           | selectattr('entity_id','in', label_entities([switch_label]))
+           | rejectattr('entity_id','in', label_entities(excluded))
+           | map(attribute='entity_id')
+           | list }}
+
+  - repeat:
+      for_each: "{{ lights_on }}"
+      sequence:
+        - choose:
+            - conditions:
+                - condition: template
+                  value_template: >
+                    {{ state_attr(repeat.item, 'brightness') is not none }}
+              sequence:
+                - service: light.turn_on
+                  target:
+                    entity_id: "{{ repeat.item }}"
+                  data:
+                    brightness_pct: !input brightness_level
+          default:
+            - service: light.turn_off
+              target:
+                entity_id: "{{ repeat.item }}"
+
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ switches_on | length > 0 }}"
+        sequence:
+          - service: switch.turn_off
+            target:
+              entity_id: "{{ switches_on }}"
