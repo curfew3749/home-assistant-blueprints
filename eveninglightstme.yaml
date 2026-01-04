@@ -1,7 +1,7 @@
 blueprint:
-  name: Flexible Evening Light Dimmer v1.1
+  name: Flexible Evening Light Dimmer v1.0
   description: |
-    Dims dimmable lights and turns off non-dimmable ones when a selected input_select changes to a specified option.
+    Dims dimmable lights and turns off non-dimmable ones when a selected input_select changes to a specified option (or optional secondary option).
     Optionally excludes lights with a selected label.
     Optionally turns off switches with a selected label.
   domain: automation
@@ -15,7 +15,7 @@ blueprint:
 
     trigger_option:
       name: Trigger Option
-      description: The option name in the input_select that triggers the dimming (e.g., "Evening").
+      description: The primary option name that triggers the dimming (e.g., "Evening").
       selector:
         text:
       default: Evening
@@ -29,14 +29,14 @@ blueprint:
 
     exclude_light_label:
       name: Exclude Label for Lights (Optional)
-      description: Select a label — lights with this label will be completely ignored (e.g., no_evening_dim).
+      description: Lights with this label will be completely ignored.
       default: ""
       selector:
         label:
 
     include_switch_label:
       name: Include Label for Switches (Optional)
-      description: Select a label — switches with this label will be turned off if they are on (e.g., evening_switches).
+      description: Switches with this label will be turned off if they are on.
       default: ""
       selector:
         label:
@@ -54,19 +54,16 @@ blueprint:
 trigger:
   - platform: state
     entity_id: !input input_select_entity
-    to: !input trigger_option
-  - platform: state
-    entity_id: !input input_select_entity
-    to: !input trigger_option_secondary
-    enabled: "{{ !input trigger_option_secondary != '' }}"
+    to:
+      - !input trigger_option
+      - "{{ !input trigger_option_secondary if !input trigger_option_secondary != '' else none }}"
 
 condition:
-  - condition: or
-    conditions:
-      - condition: template
-        value_template: "{{ trigger.to_state.state == !input trigger_option }}"
-      - condition: template
-        value_template: "{{ !input trigger_option_secondary == '' and trigger.to_state.state == !input trigger_option_secondary }}"
+  - condition: template
+    value_template: >
+      {% set trigger_state = trigger.to_state.state %}
+      {{ trigger_state == !input trigger_option
+         or ( !input trigger_option_secondary != '' and trigger_state == !input trigger_option_secondary) }}
 
 action:
   # Dim or turn off lights (excluding labeled ones if selected)
