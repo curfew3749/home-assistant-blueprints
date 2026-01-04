@@ -1,19 +1,17 @@
 blueprint:
-  name: Adjust Active Lights by Capability (Lights + Switches) v1.5
+  name: Adjust Active Lights by Capability (Lights + Switches) v1.6
   description: >
     Dims all currently-on dimmable lights to a selected brightness,
     turns off non-dimmable lights, and turns off switches explicitly
     labeled as lights. Entities with excluded labels are ignored.
     Triggers when a selected entity changes to a specified state or option.
   domain: automation
-
   input:
     trigger_entity:
       name: Trigger Entity
       description: Entity that activates this automation
       selector:
         entity:
-
     trigger_state:
       name: Trigger State / Option
       description: >
@@ -22,7 +20,6 @@ blueprint:
       default: "on"
       selector:
         text:
-
     brightness_level:
       name: Brightness Percentage
       default: 30
@@ -31,7 +28,6 @@ blueprint:
           min: 1
           max: 100
           unit_of_measurement: "%"
-
     excluded_labels:
       name: Excluded Labels
       description: Entities with any of these labels will be ignored
@@ -39,37 +35,27 @@ blueprint:
       selector:
         label:
           multiple: true
-
     switch_light_label:
       name: Switch-as-Light Label
       description: Switches with this label are treated as lights
       default: treat_as_light
       selector:
         label:
-
 mode: single
-
 trigger:
   - platform: state
     entity_id: !input trigger_entity
-
-condition:
-  - condition: template
-    value_template: >
-      {{ trigger.to_state.state == trigger_state }}
-
+    to: !input trigger_state
 action:
   - variables:
       excluded: !input excluded_labels
       switch_label: !input switch_light_label
-
       lights_on: >
         {{ states.light
            | selectattr('state', 'eq', 'on')
            | rejectattr('entity_id', 'in', label_entities(excluded))
            | map(attribute='entity_id')
            | list }}
-
       switches_on: >
         {{ states.switch
            | selectattr('state', 'eq', 'on')
@@ -77,7 +63,6 @@ action:
            | rejectattr('entity_id', 'in', label_entities(excluded))
            | map(attribute='entity_id')
            | list }}
-
   - repeat:
       for_each: "{{ lights_on }}"
       sequence:
@@ -96,7 +81,6 @@ action:
             - service: light.turn_off
               target:
                 entity_id: "{{ repeat.item }}"
-
   - choose:
       - conditions:
           - condition: template
