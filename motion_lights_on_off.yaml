@@ -1,0 +1,74 @@
+# Motion-controlled lights blueprint
+# Version: 1.0.0
+
+blueprint:
+  name: Motion-controlled lights (on/off with delay)
+  description: >
+    Version: 1.0.0
+    Turns lights on when motion or occupancy is detected and turns them off
+    after no motion is detected for a configurable time.
+  domain: automation
+
+  input:
+    motion_sensors:
+      name: Motion / Occupancy sensor(s)
+      description: One or more motion or occupancy binary sensors
+      selector:
+        entity:
+          domain: binary_sensor
+          multiple: true
+
+    target_lights:
+      name: Light(s)
+      description: Light or lights to control
+      selector:
+        target:
+          entity:
+            domain: light
+
+    off_delay:
+      name: Delay before turning lights off
+      description: Time to wait after motion stops
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 120
+          step: 1
+          unit_of_measurement: minutes
+
+mode: restart
+
+trigger:
+  - platform: state
+    entity_id: !input motion_sensors
+    to: "on"
+
+  - platform: state
+    entity_id: !input motion_sensors
+    to: "off"
+
+action:
+  - choose:
+      # Motion detected → turn lights on
+      - conditions:
+          - condition: state
+            entity_id: !input motion_sensors
+            state: "on"
+        sequence:
+          - service: light.turn_on
+            target: !input target_lights
+
+      # No motion → wait, then turn lights off
+      - conditions:
+          - condition: state
+            entity_id: !input motion_sensors
+            state: "off"
+        sequence:
+          - delay:
+              minutes: !input off_delay
+          - condition: state
+            entity_id: !input motion_sensors
+            state: "off"
+          - service: light.turn_off
+            target: !input target_lights
